@@ -1,0 +1,176 @@
+import os
+import tempfile
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+import io
+import asyncio
+import time
+
+from faster_whisper import WhisperModel
+
+# --- WORKAROUND: Thêm đường dẫn DLL của mini CUDA (cuBLAS/cuDNN) vào PATH ---
+try:
+    import nvidia
+    nv_path = nvidia.__path__[0]
+    cublas_dir = os.path.join(nv_path, "cublas", "bin")
+    cudnn_dir = os.path.join(nv_path, "cudnn", "bin")
+    os.environ["PATH"] = cublas_dir + os.pathsep + cudnn_dir + os.pathsep + os.environ.get("PATH", "")
+    print(f"CUDA workaround loaded from: {cublas_dir}")
+except Exception as e:
+    print(f"Warning: Failed to load CUDA path: {e}")
+# -----------------------------------------------------------------------------
+
+from prompt import get_system_prompt
+from voice import generate_audio_file
+from llm_service import generate_chat_response, Message
+
+# Load Whisper STT model 
+# Sử dụng model 'small' với float16 (Tốc độ phản hồi cực nhanh, độ chính xác khá tốt trên GPU)
+# Tải và lưu model vào thư mục 'models' ngay trong folder project
+models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+print(f"Loading Whisper STT model (small) into {models_dir}...")
+stt_model = WhisperModel("small", device="auto", compute_type="float16", download_root=models_dir)
+print("Whisper STT loaded!")
+
+app = FastAPI(title="VirtuHire Assistant (Web)")
+
+# Setup templates directory
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+
+# Pydantic models for API request validation
+class ChatRequest(BaseModel):
+    message: str
+    job_title: str | None = None
+    history: list[Message] = []
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    """Serve the web frontend UI."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest):
+    """Handle chat requests using Gemini 3.1 Flash Lite"""
+    messages = []
+    
+    # Prepend the system prompt if a job title is provided
+    if req.job_title:
+        sys_prompt = get_system_prompt(req.job_title)
+        messages.append({"role": "system", "content": sys_prompt})
+        
+    # Append the chat history sent from the client
+    for msg in req.history:
+        messages.append({"role": msg.role, "content": msg.content})
+        
+    # Append the new user message
+    messages.append({"role": "user", "content": req.message})
+    
+    return await generate_chat_response(messages)
+
+
+class TTSRequest(BaseModel):
+    text: str
+
+@app.post("/api/tts")
+async def tts_endpoint(req: TTSRequest):
+    try:
+        temp_path = await generate_audio_file(req.text)
+        return FileResponse(temp_path, media_type="audio/wav")
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/stt")
+async def stt_endpoint(audio: UploadFile = File(...)):
+    """Nhận file WAV từ Unity, dùng Whisper để chuyển thành text."""
+    try:
+        # Lưu file upload vào temp
+        contents = await audio.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        # Whisper transcribe
+        import asyncio
+        import traceback
+        import time
+        def transcribe():
+            try:
+                start_stt = time.time()
+                segments, _ = stt_model.transcribe(tmp_path, beam_size=5)
+                result = " ".join(seg.text.strip() for seg in segments)
+                print(f"[STT] Whisper STT Processing Time: {time.time() - start_stt:.3f} seconds")
+                return result
+            except Exception as inner_e:
+                print(f"[STT] Transcribe error: {inner_e}")
+                traceback.print_exc()
+                raise inner_e
+
+        text = await asyncio.to_thread(transcribe)
+        os.unlink(tmp_path)
+
+        print(f"[STT] Transcribed: {text}")
+        return JSONResponse({"text": text.strip()})
+    except Exception as e:
+        print(f"[STT] Endpoint API Error: {e}")
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/chat_voice")
+async def chat_voice_endpoint(req: ChatRequest):
+    """Handle chat requests and directly return TTS audio."""
+    print(f"\n[API] Received request at /api/chat_voice!")
+    print(f"[API] User Message: {req.message}")
+    
+    messages = []
+    
+    # Prepend the system prompt if a job title is provided
+    if req.job_title:
+        sys_prompt = get_system_prompt(req.job_title)
+        messages.append({"role": "system", "content": sys_prompt})
+        
+    # Append the chat history sent from the client
+    for msg in req.history:
+        messages.append({"role": msg.role, "content": msg.content})
+        
+    # Append the new user message
+    messages.append({"role": "user", "content": req.message})
+    
+    # 1. Get LLM response
+    print("[API] Waiting for Gemini AI...")
+    llm_start = time.time()
+    chat_response = await generate_chat_response(messages)
+    llm_time = time.time() - llm_start
+    print(f"[API] => Gemini API Time: {llm_time:.3f} seconds")
+    
+    if "error" in chat_response:
+        print(f"[API] Error from Gemini: {chat_response['error']}")
+        return {"error": chat_response["error"]}
+        
+    ai_text = chat_response.get("response", "")
+    print(f"[API] AI Responded:\n------------------\n{ai_text}\n------------------")
+    print(f"[API] Sending text to Piper TTS for audio generation...")
+    
+    # 2. Generate Audio
+    try:
+        tts_start = time.time()
+        temp_path = await generate_audio_file(ai_text)
+        tts_time = time.time() - tts_start
+        print(f"[API] => Piper TTS Time: {tts_time:.3f} seconds")
+        
+        print(f"[API] Audio file ready at {temp_path}!")
+        print(f"[API] Returning .wav to client...")
+        return FileResponse(temp_path, media_type="audio/wav")
+    except Exception as e:
+        print(f"[API] Error during TTS audio generation: {e}")
+        return {"error": str(e)}
+
+        return {"error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    # Make sure to run the uvicorn server starting point
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)

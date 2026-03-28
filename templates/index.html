@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VirtuHire AI Simulator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-base: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+        }
+
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+
+        .sidebar {
+            width: 320px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border-right: 1px solid var(--border);
+            z-index: 10;
+        }
+
+        .main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+            background: linear-gradient(135deg, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .desc {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin: 0 0 24px 0;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select, textarea {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+        .message {
+            max-width: 80%;
+            padding: 14px 18px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            background: linear-gradient(135deg, var(--primary), #818cf8);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .message.ai {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            background: var(--panel-bg);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        
+        .input-area input {
+            flex: 1;
+            margin-bottom: 0;
+            background: transparent;
+            border: none;
+        }
+        
+        .input-area input:focus {
+            box-shadow: none;
+        }
+
+        .mic-btn {
+            background: #ef4444;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+        }
+        .mic-btn:hover { background: #dc2626; }
+        
+        .mic-btn.recording {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        
+        .admin-link {
+            text-decoration: none;
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 500;
+            display: inline-block;
+            margin-top: auto;
+            align-self: center;
+        }
+        .admin-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar glass-panel">
+        <div>
+            <h1>VirtuHire</h1>
+            <p class="desc">Web Interview Simulator</p>
+            
+            <div class="form-group">
+                <label>Job Title</label>
+                <input type="text" id="jobTitle" value="Data Analyst" placeholder="e.g. Software Engineer">
+            </div>
+            
+            <div class="form-group">
+                <label>Interview Type</label>
+                <select id="interviewType">
+                    <option value="Attitude Interview">Attitude Interview</option>
+                    <option value="Role-Specific Interview">Role-Specific Interview</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Language</label>
+                <select id="language">
+                    <option value="Vietnamese">Vietnamese</option>
+                    <option value="English">English</option>
+                </select>
+            </div>
+            
+            <button id="startBtn" onclick="startInterview()">Bắt đầu phỏng vấn</button>
+        </div>
+        
+        <a href="/logs" class="admin-link" target="_blank">Mở giao diện Quản trị viên (Logs) -></a>
+    </div>
+
+    <div class="main-chat">
+        <div class="chat-box" id="chatBox">
+            <div class="message ai">Chào bạn! Nhập thông tin bên cửa sổ trái và ấn "Bắt đầu" để tiến hành phỏng vấn. Hệ thống tự động kích hoạt Voice.</div>
+        </div>
+        
+        <div class="input-area glass-panel">
+            <input type="text" id="msgInput" placeholder="Nhập tin nhắn để nói chuyện với AI..." onkeypress="handleEnter(event)">
+            <button class="mic-btn" id="micBtn" onclick="toggleRecording()" title="Voice Input">
+                🎤
+            </button>
+            <button onclick="sendMessage()" id="sendBtn">Gửi</button>
+        </div>
+    </div>
+
+    <script>
+        let chatHistory = [];
+        let isRecording = false;
+        let mediaRecorder;
+        let audioChunks = [];
+        let currentAudio = null;
+
+        function addMessage(text, role) {
+            const box = document.getElementById("chatBox");
+            const msg = document.createElement("div");
+            msg.className = `message ${role}`;
+            msg.innerText = text;
+            box.appendChild(msg);
+            box.scrollTop = box.scrollHeight;
+            if(role === 'user') chatHistory.push({role: "user", content: text});
+            else chatHistory.push({role: "assistant", content: text});
+        }
+
+        function handleEnter(e) { if(e.key === 'Enter') sendMessage(); }
+
+        async function startInterview() {
+            chatHistory = [];
+            document.getElementById("chatBox").innerHTML = "";
+            await sendPayload("Chào Sarah!");
+        }
+
+        async function sendMessage() {
+            const val = document.getElementById("msgInput").value.trim();
+            if(!val) return;
+            document.getElementById("msgInput").value = "";
+            await sendPayload(val);
+        }
+
+        async function sendPayload(userMsg) {
+            addMessage(userMsg, "user");
+            
+            const jobTitle = document.getElementById("jobTitle").value;
+            const interviewType = document.getElementById("interviewType").value;
+            const language = document.getElementById("language").value;
+            const sendBtn = document.getElementById("sendBtn");
+            
+            sendBtn.disabled = true;
+            sendBtn.innerText = "Đang xử lý...";
+            
+            if(currentAudio) { currentAudio.pause(); currentAudio = null; }
+
+            try {
+                // Submit straight to /api/chat_voice to get WAV back immediately
+                const res = await fetch("/api/chat_voice", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        message: userMsg,
+                        job_title: jobTitle,
+                        interview_type: interviewType,
+                        language: language,
+                        history: chatHistory.slice(0, -1) // Excluding the one we just pushed visually
+                    })
+                });
+
+                if(!res.ok) throw new Error("API Error");
+
+                // Giả lập đọc Transcript từ header X-Transcript
+                const transcript = decodeURIComponent(res.headers.get("x-transcript") || "Không nhận được transcript.");
+                addMessage(transcript, "ai");
+
+                // Get array buffer to play audio
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                currentAudio = new Audio(url);
+                currentAudio.play();
+
+            } catch(e) {
+                console.error(e);
+                addMessage("Lỗi kết nối máy chủ.", "ai");
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerText = "Gửi";
+            }
+        }
+        
+        async function toggleRecording() {
+            const micBtn = document.getElementById("micBtn");
+            
+            if(!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                    audioChunks = [];
+                    
+                    mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+                    
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const formData = new FormData();
+                        formData.append("audio", audioBlob, "voice.webm");
+                        
+                        micBtn.innerText = "⏳";
+                        try {
+                            const res = await fetch('/api/stt', { method: 'POST', body: formData });
+                            const data = await res.json();
+                            if(data.text) {
+                                document.getElementById("msgInput").value = data.text;
+                                sendMessage();
+                            } else alert("Không nghe rõ, thử lại.");
+                        } catch(e) { alert("Lỗi gửi giọng nói."); }
+                        micBtn.innerText = "🎤";
+                    };
+                    
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micBtn.classList.add("recording");
+                } catch(e) { alert("Bạn cần cấp quyền Micro."); }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                micBtn.classList.remove("recording");
+            }
+        }
+    </script>
+</body>
+</html>

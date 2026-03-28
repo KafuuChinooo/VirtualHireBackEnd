@@ -1,0 +1,108 @@
+import os
+import time
+import asyncio
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from google import genai
+from google.genai import types
+from prompt import get_system_prompt
+from dotenv import load_dotenv
+
+# Load .env from the main AI project folder
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "AI", ".env")
+load_dotenv(env_path)
+
+app = FastAPI(title="LiveAPI Audio Streaming")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+
+# Configure Gemini for Live Audio (Native Audio version ending 12/2026)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+genai_client = genai.Client(api_key=GEMINI_API_KEY)
+LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    """Serve the web frontend UI."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket):
+    await websocket.accept()
+    
+    # Receive initial payload with job title
+    try:
+        initial_msg = await websocket.receive_json()
+        job_title = initial_msg.get("job_title", "General")
+        print(f"\n[Live WS] Started voice session for: {job_title}")
+    except Exception as e:
+        print(f"[Live WS] Error payload: {e}")
+        job_title = "General"
+    
+    sys_prompt = get_system_prompt(job_title)
+    
+    config = types.LiveConnectConfig(
+        system_instruction=types.Content(parts=[types.Part.from_text(text=sys_prompt)]),
+        response_modalities=["AUDIO"]
+    )
+    
+    try:
+        async with genai_client.aio.live.connect(model=LIVE_MODEL, config=config) as gemini_session:
+            
+            async def receive_from_client():
+                try:
+                    while True:
+                        data = await websocket.receive_bytes()
+                        # PCM 16kHz
+                        await gemini_session.send(input={"data": data, "mime_type": "audio/pcm;rate=16000"})
+                except WebSocketDisconnect:
+                    print("[Live WS] Client disconnected.")
+                except Exception as e:
+                    print(f"[Live WS] Client error: {e}")
+
+            async def receive_from_gemini():
+                try:
+                    async for response in gemini_session.receive():
+                        server_content = response.server_content
+                        if server_content is not None:
+                            model_turn = server_content.model_turn
+                            if model_turn:
+                                for part in model_turn.parts:
+                                    if part.inline_data and part.inline_data.data:
+                                        # Send PCM back to client
+                                        try:
+                                            await websocket.send_bytes(part.inline_data.data)
+                                        except Exception:
+                                            pass
+                                    if part.text:
+                                        print(f"[Gemini Transcribed] {part.text.strip()}")
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    print(f"[Live WS] Gemini feed error: {e}")
+
+            gemini_task = asyncio.create_task(receive_from_gemini())
+            client_task = asyncio.create_task(receive_from_client())
+            
+            done, pending = await asyncio.wait(
+                [client_task, gemini_task],
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+                
+    except Exception as e:
+        print(f"[Live WS] Connection error: {e}")
+    finally:
+        print(f"[Live WS] Session ended.")
+        try:
+            await websocket.close()
+        except:
+            pass
+
+if __name__ == "__main__":
+    import uvicorn
+    # Make sure to run the uvicorn server starting point on port 8001 to avoid conflicts
+    uvicorn.run("main:app", host="127.0.0.1", port=8001, reload=False)

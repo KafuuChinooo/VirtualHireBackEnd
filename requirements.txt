@@ -1,0 +1,1 @@
+fastapi\nuvicorn\npython-multipart\nJinja2\npydantic\npython-dotenv\nfaster-whisper\npiper-tts\ngoogle-genai\nsounddevice\nsoundfile\nnumpy\n\n

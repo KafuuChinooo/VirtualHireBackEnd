@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VirtuHire Admin - System Logs & Controller</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --primary: #3b82f6;
+            --danger: #ef4444;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            min-height: 100vh;
+        }
+
+        h1 { margin: 0; font-size: 28px; font-weight: 700; }
+        p { margin: 0; color: var(--text-dim); }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+        }
+
+        button {
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        button:hover { opacity: 0.9; }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-surface { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); }
+        .btn-danger { background: var(--danger); color: white; }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+            flex: 1;
+        }
+
+        .logs-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .logs-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .log-list {
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-height: 700px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .log-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .badge-user { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .badge-assistant { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge-system { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+        .content {
+            font-size: 15px;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        .admin-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            height: fit-content;
+        }
+
+        textarea {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 12px;
+            border-radius: 8px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h1>VirtuHire Logs Dashboard</h1>
+            <p>Monitor real-time interview conversations and intervene.</p>
+        </div>
+        <div class="controls">
+            <button class="btn-surface" onclick="refreshLogs()">🔄 Refresh Logs</button>
+            <button class="btn-primary" onclick="window.close()">Close Dashboard</button>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <div class="logs-container">
+            <div class="logs-header">
+                <span style="color: #60a5fa;">●</span> Live Conversation Transcript
+            </div>
+            <div class="log-list" id="logList">
+                <div style="text-align: center; color: var(--text-dim); padding: 40px;">
+                    Loading logs...
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-panel">
+            <h3>🚑 Admin Rescue</h3>
+            <p style="font-size: 13px; margin-bottom: 8px;">Override the AI's response if the STT fails or candidate is stuck. The message will be spoken immediately by Unity.</p>
+            
+            <textarea id="adminMsg" placeholder="Type a message to inject into the active interview session..."></textarea>
+            
+            <button class="btn-danger" style="justify-content: center; padding: 12px;" onclick="sendAdminMessage()">
+                Force Inject Message
+            </button>
+            
+            <div id="status" style="font-size: 12px; text-align: center; margin-top: 8px; display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function refreshLogs() {
+            const list = document.getElementById("logList");
+            try {
+                const res = await fetch("/api/logs");
+                const data = await res.json();
+                
+                list.innerHTML = "";
+                if (!data.logs || data.logs.length === 0) {
+                    list.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 40px;">Bản ghi trống. Vui lòng chat để tạo lịch sử.</div>';
+                    return;
+                }
+                
+                // Show latest first
+                [...data.logs].reverse().forEach(log => {
+                    const date = new Date(log.timestamp * 1000).toLocaleString('vi-VN');
+                    let roleBadge = "system";
+                    if (log.role === "user") roleBadge = "user";
+                    if (log.role === "assistant") roleBadge = "assistant";
+
+                    const item = document.createElement("div");
+                    item.className = "log-item";
+                    item.innerHTML = `
+                        <div class="meta">
+                            <div>
+                                <span class="badge badge-${roleBadge}">${log.role}</span>
+                                <span style="margin-left:8px; font-weight:600; color:#fff;">${log.job_title}</span>
+                            </div>
+                            <span>${date}</span>
+                        </div>
+                        <div class="content">${log.message.replace(/\n/g, '<br>')}</div>
+                    `;
+                    list.appendChild(item);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function sendAdminMessage() {
+            const el = document.getElementById("adminMsg");
+            const status = document.getElementById("status");
+            const text = el.value.trim();
+            if(!text) return;
+            
+            el.disabled = true;
+            try {
+                const res = await fetch("/api/admin_message", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ message: text })
+                });
+                if(res.ok) {
+                    status.style.display = "block";
+                    status.style.color = "#34d399";
+                    status.innerText = "✓ Message injected successfully!";
+                    el.value = "";
+                    setTimeout(() => status.style.display="none", 3000);
+                }
+            } catch(e) {
+                status.style.display = "block";
+                status.style.color = "#ef4444";
+                status.innerText = "❌ Failed to send message.";
+            } finally {
+                el.disabled = false;
+            }
+        }
+
+        // Auto refresh
+        setInterval(refreshLogs, 3000);
+        refreshLogs();
+    </script>
+</body>
+</html>

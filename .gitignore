@@ -1,0 +1,45 @@
+# Environments
+.env
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs & Temp Audio
+chat_logs.json
+*.log
+*.wav
+
+# Models & Large binaries (Do not commit to Git)
+*.onnx
+*.onnx.json
+models/
+
+# Unity Scripts & Caches (If any copied over)
+*.cs
+[Aa]ssets/
+[Ll]ibrary/
+
+# OS specific defaults
+.DS_Store
+Thumbs.db
+
+*.wav
+*.mp3
+__pycache__/
+.env
+.venv/
+*.log
+
+*.wav
+*.mp3
+__pycache__/
+.env
+.venv/
+*.log
